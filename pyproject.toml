@@ -1,0 +1,23 @@
+[project]
+name = "peptide-v2"
+version = "0.1.0"
+description = "Structure-based peptide design: ProteinMPNN + Boltz-2 + PRODIGY"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "biopython==1.84",
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "streamlit>=1.36.0",
+    "py3dmol>=2.0.0",
+    "requests>=2.31",
+    "gemmi>=0.6",
+    "torch>=2.1.0",
+    "huggingface-hub>=0.20",
+    "einops>=0.7",
+    "biotite>=0.38",
+    "boltz",
+    "prodigy-prot",
+]
+
+[tool.uv]
+package = false
