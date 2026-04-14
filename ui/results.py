@@ -37,14 +37,8 @@ def render_results(pipeline_result) -> None:
     n_total = len(df)
     n_passing = df["passes_ipsae"].sum()
 
-    # ── Summary ─────────────────────────────────────────────────────────────
-    st.caption(
-        f"Completed in {elapsed:.0f}s  •  "
-        f"{n_total} candidates evaluated  •  "
-        f"{n_passing} passed iPSAE ≥ {IPSAE_THRESHOLD}"
-    )
-
-    col1, col2, col3 = st.columns(3)
+    # ── Summary metrics ──────────────────────────────────────────────────────
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Total candidates", n_total)
     with col2:
@@ -52,6 +46,16 @@ def render_results(pipeline_result) -> None:
     with col3:
         best_dg = df.loc[df["passes_ipsae"], "delta_g_kcal_mol"].min()
         st.metric("Best ΔG (passing)", f"{best_dg:.2f} kcal/mol" if pd.notna(best_dg) else "—")
+    with col4:
+        if elapsed < 60:
+            elapsed_str = f"{elapsed:.0f} s"
+        elif elapsed < 3600:
+            elapsed_str = f"{elapsed / 60:.1f} min"
+        else:
+            h = int(elapsed // 3600)
+            m = int((elapsed % 3600) / 60)
+            elapsed_str = f"{h}h {m}m"
+        st.metric("Elapsed time", elapsed_str)
 
     st.divider()
 

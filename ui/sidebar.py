@@ -196,6 +196,10 @@ def render_sidebar() -> dict:
             boltz_sampling = st.number_input("Sampling steps", min_value=10, max_value=500, value=50, step=10)
             boltz_samples = st.number_input("Diffusion samples", min_value=1, max_value=5, value=1)
             boltz_seed = st.number_input("Seed", min_value=0, max_value=99999, value=42)
+
+            # ── Quality & time indicator ──────────────────────────────────────
+            st.markdown("### Run estimate")
+            _render_run_estimate(n_sequences, boltz_sampling, boltz_recycling)
         else:
             boltz_recycling = 1
             boltz_sampling = 10
@@ -392,3 +396,54 @@ def _render_rcsb_search(target_name: str):
             f"Current: {st.session_state['downloaded_structure_pdb_id']} "
             f"({st.session_state['downloaded_structure_name']})"
         )
+
+
+def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps: int) -> None:
+    """Show quality level and estimated run time for current Expert mode settings.
+
+    Time model (CPU, boltz1):
+      - MSA fetch:   ~3 min/candidate (ColabFold API, first run)
+      - Inference:   ~0.35 min/step × sampling_steps × recycling_steps
+      - Total/cand:  3 + 0.35 × sampling_steps × recycling_steps (min)
+    GPU (CUDA): roughly 10–15× faster on inference.
+    """
+    # Quality label
+    if sampling_steps <= 10:
+        quality = "Demo only"
+        quality_icon = "⚠️"
+        ipsae_note = "iPSAE スコアは信頼できません（収束不十分）"
+    elif sampling_steps <= 30:
+        quality = "Low quality"
+        quality_icon = "⚠️"
+        ipsae_note = "iPSAE が閾値 0.5 を下回る可能性があります"
+    elif sampling_steps <= 75:
+        quality = "Minimum usable"
+        quality_icon = "ℹ️"
+        ipsae_note = "iPSAE の信頼性が確保できる最低ライン"
+    elif sampling_steps <= 150:
+        quality = "Good quality"
+        quality_icon = "✅"
+        ipsae_note = "信頼性の高い iPSAE スコアが期待できます"
+    else:
+        quality = "Production quality"
+        quality_icon = "✅"
+        ipsae_note = "最高品質（CPU では非常に長時間）"
+
+    # Estimated time (CPU)
+    min_per_cand = 3.0 + 0.35 * sampling_steps * recycling_steps
+    total_min = min_per_cand * n_sequences
+
+    def _fmt_time(minutes: float) -> str:
+        if minutes < 60:
+            return f"~{minutes:.0f} min"
+        h = int(minutes // 60)
+        m = int(minutes % 60)
+        return f"~{h}h {m}m" if m else f"~{h}h"
+
+    st.info(
+        f"{quality_icon} **Quality: {quality}**  \n"
+        f"{ipsae_note}  \n\n"
+        f"**Estimated time (CPU)**  \n"
+        f"Per candidate: {_fmt_time(min_per_cand)}  \n"
+        f"Total ({n_sequences} candidates): **{_fmt_time(total_min)}**"
+    )
