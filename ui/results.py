@@ -105,7 +105,7 @@ def render_results(pipeline_result) -> None:
         {
             "iPSAE": lambda x: f"{x:.3f}" if pd.notna(x) else "—",
             "ΔG (kcal/mol)": lambda x: f"{x:.2f}" if pd.notna(x) else "—",
-            "Kd (nM)": lambda x: f"{x:.1f}" if pd.notna(x) else "—",
+            "Kd (nM)": lambda x: f"{x:.2e}" if pd.notna(x) else "—",
         }
     ).apply(
         lambda row: [
@@ -115,7 +115,7 @@ def render_results(pipeline_result) -> None:
         axis=1,
     )
 
-    st.dataframe(show_df, use_container_width=True, hide_index=True)
+    st.dataframe(show_df, width="stretch", hide_index=True)
 
     # ── Structure viewer ─────────────────────────────────────────────────────
     passing_with_structure = display_df[
@@ -126,12 +126,14 @@ def render_results(pipeline_result) -> None:
         st.divider()
         st.markdown("#### 3D Structure Viewer")
 
-        seq_options = [
-            f"Rank {row['rank']}: {row['sequence'][:15]}... (ΔG={row['delta_g_kcal_mol']:.2f})"
-            if len(row["sequence"]) > 15 else
-            f"Rank {row['rank']}: {row['sequence']} (ΔG={row['delta_g_kcal_mol']:.2f})"
-            for _, row in passing_with_structure.iterrows()
-        ]
+        def _fmt_option(row):
+            dg = row["delta_g_kcal_mol"]
+            dg_str = f"{dg:.2f}" if dg is not None else "N/A"
+            seq = row["sequence"]
+            label = f"{seq[:15]}..." if len(seq) > 15 else seq
+            return f"Rank {row['rank']}: {label} (ΔG={dg_str})"
+
+        seq_options = [_fmt_option(row) for _, row in passing_with_structure.iterrows()]
         selected_label = st.selectbox("Select candidate to view", seq_options)
         selected_idx = seq_options.index(selected_label)
         selected_row = passing_with_structure.iloc[selected_idx]
@@ -190,7 +192,7 @@ def _render_scatter(df: pd.DataFrame) -> None:
                     alt.Tooltip("sequence:N", title="Sequence"),
                     alt.Tooltip("ipsae:Q", title="iPSAE", format=".3f"),
                     alt.Tooltip("delta_g_kcal_mol:Q", title="ΔG (kcal/mol)", format=".2f"),
-                    alt.Tooltip("kd_nm:Q", title="Kd (nM)", format=".1f"),
+                    alt.Tooltip("kd_nm:Q", title="Kd (nM)", format=".2e"),
                 ],
             )
         )
@@ -201,7 +203,7 @@ def _render_scatter(df: pd.DataFrame) -> None:
             .encode(x="x")
         )
 
-        st.altair_chart(chart + threshold_line, use_container_width=True)
+        st.altair_chart(chart + threshold_line, width="stretch")
 
     except ImportError:
         # Fallback to basic scatter if altair not available
@@ -211,7 +213,7 @@ def _render_scatter(df: pd.DataFrame) -> None:
         scatter_df = scatter_df.dropna(subset=["ipsae", "delta_g_kcal_mol"])[
             ["ipsae", "delta_g_kcal_mol"]
         ].rename(columns={"ipsae": "iPSAE", "delta_g_kcal_mol": "ΔG (kcal/mol)"})
-        st.scatter_chart(scatter_df, x="iPSAE", y="ΔG (kcal/mol)", use_container_width=True)
+        st.scatter_chart(scatter_df, x="iPSAE", y="ΔG (kcal/mol)")
 
 
 def _render_structure(

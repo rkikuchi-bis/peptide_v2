@@ -46,8 +46,8 @@ class PipelineConfig:
     mpnn_temperature: float = 0.1
 
     # Boltz-2 settings
-    boltz_recycling_steps: int = 3
-    boltz_sampling_steps: int = 200
+    boltz_recycling_steps: int = 1
+    boltz_sampling_steps: int = 10
     boltz_diffusion_samples: int = 1
     boltz_seed: Optional[int] = 42
 

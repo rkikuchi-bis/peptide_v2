@@ -99,22 +99,16 @@ def _run_prodigy(
 
         prodigy = Prodigy(structure, selection=chains, temp=temperature)
         prodigy.predict(distance_cutoff=5.5, acc_threshold=0.05)
-        prodigy.print_prediction(outfile="")  # trigger internal calculation
+        prodigy.print_prediction(outfile="")
 
-        delta_g = prodigy.dG_pred
-        kd = prodigy.Kd_pred
-        n_contacts = (
-            prodigy.ic_network.count_contacts()
-            if hasattr(prodigy, "ic_network") and prodigy.ic_network
-            else None
-        )
-
-        kd_nm = kd * 1e9 if kd is not None else None
+        delta_g = prodigy.ba_val   # ΔG in kcal/mol
+        kd = prodigy.kd_val        # Kd in M
+        n_contacts = len(prodigy.ic_network) if prodigy.ic_network else None
 
         return {
             "delta_g": round(delta_g, 3) if delta_g is not None else None,
             "kd": kd,
-            "kd_nm": round(kd_nm, 4) if kd_nm is not None else None,
+            "kd_nm": kd * 1e9 if kd is not None else None,  # nM, raw float
             "n_contacts": n_contacts,
             "error": None,
         }

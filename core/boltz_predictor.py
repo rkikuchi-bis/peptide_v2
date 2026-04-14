@@ -1,9 +1,10 @@
-"""Boltz-2 complex structure predictor.
+"""Boltz complex structure predictor (uses boltz1 model).
 
 Wraps boltz CLI to:
   1. Build a YAML input for receptor + peptide
-  2. Run Boltz-2 structure prediction (--write_full_pae)
-  3. Compute iPSAE from PAE matrix (Watson et al. 2026 definition)
+  2. Run Boltz structure prediction via CLI
+  3. Compute iPSAE from PAE matrix when available (Watson et al. 2026 definition)
+     Falls back to iptm when boltz1 does not output PAE files.
   4. Parse confidence JSON for supplementary metrics (iptm, ptm, etc.)
   5. Return predicted structure path and confidence metrics
 
@@ -12,7 +13,7 @@ iPSAE definition (Watson et al. bioRxiv 2026.03.14.711748, Methods):
    is in the peptide and the other is in the receptor, normalized to [0,1]"
   Computed here as: 1 - (mean_interface_PAE / 32.0), clipped to [0, 1].
 
-Boltz-2 confidence fields: iptm, ptm, complex_iplddt, pair_chains_iptm
+Boltz1 confidence fields: iptm, ptm, complex_iplddt, pair_chains_iptm
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import json
 import os
 import subprocess
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -75,16 +77,25 @@ def compute_ipsae_from_pae(
         return None
 
 
+def _boltz_env() -> dict:
+    """Environment for boltz subprocess with MPS fallback enabled."""
+    env = deepcopy(os.environ)
+    env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    return env
+
+
 def _get_accelerator() -> str:
     """Return best available accelerator for boltz CLI.
 
-    Boltz CLI accepts: 'gpu', 'cpu', 'tpu'.
-    MPS (Apple Silicon) is not a valid CLI value — use 'cpu' on Mac.
+    Priority: gpu (CUDA) > mps (Apple Silicon) > cpu.
+    boltz main.py is patched to accept 'mps' as a valid choice.
     """
     try:
         import torch
         if torch.cuda.is_available():
             return "gpu"
+        if torch.backends.mps.is_available():
+            return "mps"
     except ImportError:
         pass
     return "cpu"
@@ -148,8 +159,8 @@ def predict_complex(
     job_id: str,
     receptor_chain_id: str = "A",
     peptide_chain_id: str = "B",
-    recycling_steps: int = 3,
-    sampling_steps: int = 200,
+    recycling_steps: int = 1,
+    sampling_steps: int = 10,
     diffusion_samples: int = 1,
     seed: Optional[int] = None,
 ) -> Dict:
@@ -193,7 +204,7 @@ def predict_complex(
     with open(yaml_path, "w") as f:
         yaml.dump(yaml_input, f, default_flow_style=False)
 
-    # Run Boltz-2 via CLI (most stable interface)
+    # Run Boltz via CLI (most stable interface)
     accelerator = _get_accelerator()
     boltz_out = out_dir / "boltz_output"
 
@@ -201,25 +212,39 @@ def predict_complex(
         "uv", "run", "boltz", "predict",
         str(yaml_path),
         "--out_dir", str(boltz_out),
-        "--model", "boltz2",
+        "--model", "boltz1",
         "--accelerator", accelerator,
         "--recycling_steps", str(recycling_steps),
         "--sampling_steps", str(sampling_steps),
         "--diffusion_samples", str(diffusion_samples),
         "--output_format", "mmcif",
-        "--write_full_pae",
         "--use_msa_server",
         "--override",
     ]
     if seed is not None:
         cmd += ["--seed", str(seed)]
 
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        timeout=1800,  # 30 min max
-    )
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_boltz_env(),
+        )
+        stdout, stderr = proc.communicate(timeout=1800)  # 30 min max
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        raise RuntimeError(f"Boltz prediction timed out after 30 min for {job_id}")
+
+    class _Result:
+        def __init__(self, returncode, stdout, stderr):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    result = _Result(proc.returncode, stdout, stderr)
 
     if result.returncode != 0:
         raise RuntimeError(
@@ -298,41 +323,143 @@ def predict_batch(
     out_dir: Path,
     run_id: str = "run",
     progress_callback=None,
-    **kwargs,
+    receptor_chain_id: str = "A",
+    peptide_chain_id: str = "B",
+    recycling_steps: int = 1,
+    sampling_steps: int = 10,
+    diffusion_samples: int = 1,
+    seed: Optional[int] = None,
 ) -> List[Dict]:
-    """Predict complex structures for a list of peptide candidates.
+    """Predict complex structures for all peptide candidates in ONE boltz call.
 
-    Args:
-        receptor_sequence: Receptor amino acid sequence
-        peptide_sequences: List of peptide sequences to evaluate
-        out_dir: Base output directory
-        run_id: Prefix for job IDs
-        progress_callback: Optional callable(i, total) for progress updates
-        **kwargs: Forwarded to predict_complex()
+    Runs a single `boltz predict <input_dir>` so the model is loaded only once,
+    dramatically reducing overhead compared to one call per candidate.
 
     Returns:
         List of result dicts (same format as predict_complex), one per peptide.
         Failed predictions are included with "error" key set.
     """
-    results = []
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     total = len(peptide_sequences)
+    job_ids = [f"{run_id}_pep{i:03d}" for i in range(total)]
 
-    for i, seq in enumerate(peptide_sequences):
-        job_id = f"{run_id}_pep{i:03d}"
+    # --- Write all YAML inputs ---
+    input_dir = out_dir / "inputs"
+    input_dir.mkdir(exist_ok=True)
+    for job_id, seq in zip(job_ids, peptide_sequences):
+        yaml_input = _build_boltz_yaml(
+            receptor_sequence=receptor_sequence,
+            peptide_sequence=seq,
+            receptor_chain_id=receptor_chain_id,
+            peptide_chain_id=peptide_chain_id,
+        )
+        yaml_path = input_dir / f"{job_id}.yaml"
+        with open(yaml_path, "w") as f:
+            yaml.dump(yaml_input, f, default_flow_style=False)
+
+    if progress_callback:
+        progress_callback(0, total)
+
+    # --- Single boltz call on the input directory ---
+    accelerator = _get_accelerator()
+    boltz_out = out_dir / "boltz_output"
+
+    cmd = [
+        "uv", "run", "boltz", "predict",
+        str(input_dir),          # directory → processes all YAMLs in one run
+        "--out_dir", str(boltz_out),
+        "--model", "boltz1",
+        "--accelerator", accelerator,
+        "--recycling_steps", str(recycling_steps),
+        "--sampling_steps", str(sampling_steps),
+        "--diffusion_samples", str(diffusion_samples),
+        "--output_format", "mmcif",
+        "--use_msa_server",
+        "--override",
+    ]
+    if seed is not None:
+        cmd += ["--seed", str(seed)]
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=_boltz_env(),
+        )
+        stdout, stderr = proc.communicate(timeout=7200)  # 2 hour max for batch
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.communicate()
+        raise RuntimeError("Boltz batch prediction timed out after 2 hours")
+
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"Boltz-2 batch prediction failed:\n"
+            f"stdout: {stdout[-1000:]}\n"
+            f"stderr: {stderr[-1000:]}"
+        )
+
+    # When boltz is given a directory named "inputs", it creates boltz_results_inputs/
+    batch_results_dir = boltz_out / f"boltz_results_{input_dir.name}"
+
+    # --- Parse results per candidate ---
+    results = []
+    for i, (job_id, seq) in enumerate(zip(job_ids, peptide_sequences)):
         if progress_callback:
-            progress_callback(i, total)
-
+            progress_callback(i + 1, total)
         try:
-            result = predict_complex(
-                receptor_sequence=receptor_sequence,
-                peptide_sequence=seq,
-                out_dir=out_dir,
-                job_id=job_id,
-                **kwargs,
+            pred_dir = batch_results_dir / "predictions" / job_id
+            if not pred_dir.exists():
+                raise FileNotFoundError(f"Output not found: {pred_dir}")
+
+            structure_files = list(pred_dir.glob("*.cif")) + list(pred_dir.glob("*.pdb"))
+            if not structure_files:
+                raise FileNotFoundError(f"No structure file in {pred_dir}")
+
+            structure_path = next(
+                (sf for sf in structure_files if "model_0" in sf.name),
+                structure_files[0],
             )
-            result["peptide_sequence"] = seq
+
+            confidence_files = list(pred_dir.glob("confidence_*.json"))
+            confidence = {}
+            if confidence_files:
+                conf_file = next(
+                    (cf for cf in confidence_files if "model_0" in cf.name),
+                    confidence_files[0],
+                )
+                with open(conf_file) as f:
+                    raw = json.load(f)
+                confidence = {
+                    "iptm": raw.get("iptm"),
+                    "ptm": raw.get("ptm"),
+                    "complex_iplddt": raw.get("complex_iplddt"),
+                    "confidence_score": raw.get("confidence_score"),
+                    "pair_chains_iptm": raw.get("pair_chains_iptm", {}),
+                }
+
+            pae_files = list(pred_dir.glob("pae_*_model_0.npz"))
+            pae_path = pae_files[0] if pae_files else pred_dir / f"pae_{job_id}_model_0.npz"
+            ipsae = compute_ipsae_from_pae(
+                pae_path=pae_path,
+                n_receptor=len(receptor_sequence),
+                n_peptide=len(seq),
+            )
+
+            results.append({
+                "job_id": job_id,
+                "peptide_sequence": seq,
+                "structure_path": structure_path,
+                "pred_dir": pred_dir,
+                "ipsae": ipsae,
+                **confidence,
+            })
         except Exception as e:
-            result = {
+            results.append({
                 "job_id": job_id,
                 "peptide_sequence": seq,
                 "error": str(e),
@@ -340,8 +467,6 @@ def predict_batch(
                 "ptm": None,
                 "complex_iplddt": None,
                 "confidence_score": None,
-            }
-
-        results.append(result)
+            })
 
     return results
