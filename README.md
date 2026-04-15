@@ -105,17 +105,22 @@ Open `http://localhost:8501` in your browser.
 
 ### Parameter Guide / パラメータガイド
 
-| Parameter | Simple mode default | Recommended (quality) | Notes |
-|-----------|--------------------|-----------------------|-------|
-| `sampling_steps` | 10 | 50+ | Higher = better structure quality (slower) |
-| `recycling_steps` | 1 | 3 | 3× slower per step |
-| `mpnn_temperature` | 0.3 | 0.1–0.3 | Lower = more focused design |
-| `n_sequences` | 5 | 10–20 | Number of peptide candidates |
-| `peptide_length` | 12 | 8–20 | Length in residues |
+| Parameter | Simple mode | Expert mode default | Notes |
+|-----------|------------|---------------------|-------|
+| `n_sequences` | 10 | **30** | Number of peptide candidates |
+| `peptide_length` | 12 | 12 | Length in residues |
+| `mpnn_temperature` | 0.3 | **0.20** | Lower = more focused design. 0.20 balances diversity and quality |
+| `sampling_steps` | 10 | **200** | Higher = better iPSAE confidence (slower) |
+| `recycling_steps` | 1 | **3** | Improves structural accuracy |
+| `diffusion_samples` | 1 | **3** | Number of structures sampled per candidate |
+| `seed` | 42 | **123** | Random seed for reproducibility |
 
-> **Note (CPU environment):** With `sampling_steps=10`, iPSAE scores are typically < 0.5 (diffusion not converged). For production-quality results, use `sampling_steps=50` (~4–5 h per batch on CPU) or a GPU environment.
+> **Recommended settings (Expert mode defaults):** calibrated from empirical runs on Apple Silicon MPS.  
+> `sampling_steps=200`, `recycling_steps=3`, `diffusion_samples=3`, `temperature=0.20`, `n_sequences=30`, `seed=123`  
+> → achieves iPSAE ≥ 0.5 in ~33% of candidates, with best ΔG around −9 to −10 kcal/mol in ~1.5 h.
 >
-> **CPUでの注意:** `sampling_steps=10` では iPSAE が 0.5 未満になることが多い（拡散収束不十分）。実用品質には `sampling_steps=50`（CPU で約4〜5時間）以上、または GPU 環境を推奨。
+> **実験的に最適化されたデフォルト値（Expert モード）:**  
+> 上記設定は Apple Silicon MPS 環境での実行結果に基づき調整済み。iPSAE 通過率 ~33%、Best ΔG −9〜−10 kcal/mol を約1.5時間で達成。
 
 ---
 
@@ -166,11 +171,14 @@ Fetched MSAs are cached per sequence, so subsequent runs with the same receptor 
 
 ## Hardware Requirements / 動作環境
 
-| Environment | Sampling steps | Time per candidate | Notes |
-|-------------|---------------|--------------------|-------|
-| CPU (Apple Silicon M-series) | 10 | ~11 min | Demo quality |
-| CPU (Apple Silicon M-series) | 50 | ~55 min | Minimum usable quality |
-| GPU (CUDA) | 50 | ~2–5 min | Recommended for production |
+| Environment | Accelerator | Sampling steps | Time (30 candidates) | iPSAE pass rate |
+|-------------|------------|----------------|----------------------|-----------------|
+| Apple Silicon M-series | MPS | 10 | ~25 min | 0% (demo only) |
+| Apple Silicon M-series | MPS | 100 | ~52 min | ~35% |
+| Apple Silicon M-series | MPS | **200** | **~1.5 h** | **~33%** ← recommended |
+| Google Colab / GPU server | CUDA (T4) | 200 | ~10–15 min | ~40%+ |
+
+The app auto-detects the available accelerator (CUDA → MPS → CPU) and adjusts the time estimate label in the sidebar accordingly.
 
 ---
 

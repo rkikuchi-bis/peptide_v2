@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import sys
 import tempfile
 from copy import deepcopy
 from pathlib import Path
@@ -99,6 +101,21 @@ def _get_accelerator() -> str:
     except ImportError:
         pass
     return "cpu"
+
+
+def _boltz_cmd() -> list:
+    """Return the boltz CLI command prefix for the current environment.
+
+    Colab / pip-install: boltz is on PATH → ["boltz", "predict"]
+    Local dev with uv:   boltz lives in the uv venv → ["uv", "run", "boltz", "predict"]
+    Fallback:            use the running Python's -m entry → [sys.executable, "-m", "boltz"]
+    """
+    if shutil.which("boltz"):
+        return ["boltz", "predict"]
+    if shutil.which("uv"):
+        return ["uv", "run", "boltz", "predict"]
+    # Last resort – works when boltz is installed in the current Python env
+    return [sys.executable, "-m", "boltz", "predict"]
 
 
 def _build_boltz_yaml(
@@ -208,8 +225,7 @@ def predict_complex(
     accelerator = _get_accelerator()
     boltz_out = out_dir / "boltz_output"
 
-    cmd = [
-        "uv", "run", "boltz", "predict",
+    cmd = _boltz_cmd() + [
         str(yaml_path),
         "--out_dir", str(boltz_out),
         "--model", "boltz1",
@@ -366,8 +382,7 @@ def predict_batch(
     accelerator = _get_accelerator()
     boltz_out = out_dir / "boltz_output"
 
-    cmd = [
-        "uv", "run", "boltz", "predict",
+    cmd = _boltz_cmd() + [
         str(input_dir),          # directory → processes all YAMLs in one run
         "--out_dir", str(boltz_out),
         "--model", "boltz1",

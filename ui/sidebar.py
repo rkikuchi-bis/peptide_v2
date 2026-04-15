@@ -177,11 +177,11 @@ def render_sidebar() -> dict:
             peptide_length = st.slider("Peptide length (aa)", min_value=6, max_value=20, value=12)
             mpnn_temperature = 0.3
         else:
-            n_sequences = st.number_input("Candidates", min_value=1, max_value=200, value=10)
+            n_sequences = st.number_input("Candidates", min_value=1, max_value=200, value=30)
             peptide_length = st.number_input("Peptide length (aa)", min_value=4, max_value=30, value=12)
             mpnn_temperature = st.number_input(
                 "ProteinMPNN temperature",
-                min_value=0.01, max_value=1.0, value=0.1, step=0.01,
+                min_value=0.01, max_value=1.0, value=0.20, step=0.01,
                 help="Lower = more focused sampling. 0.1 is recommended for binder design.",
             )
 
@@ -192,10 +192,10 @@ def render_sidebar() -> dict:
         # ── Boltz-2 parameters (Expert only) ─────────────────────────────────
         if mode == "Expert":
             st.markdown("### Boltz-2")
-            boltz_recycling = st.number_input("Recycling steps", min_value=1, max_value=10, value=1)
-            boltz_sampling = st.number_input("Sampling steps", min_value=10, max_value=500, value=50, step=10)
-            boltz_samples = st.number_input("Diffusion samples", min_value=1, max_value=5, value=1)
-            boltz_seed = st.number_input("Seed", min_value=0, max_value=99999, value=42)
+            boltz_recycling = st.number_input("Recycling steps", min_value=1, max_value=10, value=3)
+            boltz_sampling = st.number_input("Sampling steps", min_value=10, max_value=500, value=200, step=10)
+            boltz_samples = st.number_input("Diffusion samples", min_value=1, max_value=5, value=3)
+            boltz_seed = st.number_input("Seed", min_value=0, max_value=99999, value=123)
 
             # ── Quality & time indicator ──────────────────────────────────────
             st.markdown("### Run estimate")
