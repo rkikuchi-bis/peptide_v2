@@ -120,8 +120,10 @@ if run_button and sidebar["ready"] and not st.session_state["running"]:
         def _progress(stage, current=0, total=1):
             h["stage"] = stage  # plain dict mutation — no Streamlit calls
 
-        h["result"] = run_pipeline(config=cfg, progress_callback=_progress)
-        h["done"] = True
+        try:
+            h["result"] = run_pipeline(config=cfg, progress_callback=_progress)
+        finally:
+            h["done"] = True  # always set, even on unexpected exception
 
     threading.Thread(target=_run_bg, args=(config, holder), daemon=True).start()
     st.rerun()
