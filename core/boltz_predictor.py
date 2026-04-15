@@ -124,7 +124,13 @@ def _build_boltz_yaml(
     receptor_chain_id: str = "A",
     peptide_chain_id: str = "B",
 ) -> dict:
-    """Build Boltz-2 YAML input dict for receptor + peptide complex."""
+    """Build Boltz-2 YAML input dict for receptor + peptide complex.
+
+    Peptide MSA is explicitly disabled (msa: null) because:
+      - Designed peptides are unique sequences with no homologs in MSA databases.
+      - MSA server fetch per peptide is the dominant runtime cost (1-3 min each).
+      - Receptor MSA is still fetched via --use_msa_server (important for accuracy).
+    """
     return {
         "sequences": [
             {
@@ -137,6 +143,7 @@ def _build_boltz_yaml(
                 "protein": {
                     "id": peptide_chain_id,
                     "sequence": peptide_sequence,
+                    "msa": None,  # skip MSA for designed peptides
                 }
             },
         ]
