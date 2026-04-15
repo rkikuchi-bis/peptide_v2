@@ -430,8 +430,13 @@ def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps:
         ipsae_note = "最高品質（CPU では非常に長時間）"
 
     # Estimated time (CPU)
-    min_per_cand = 3.0 + 0.35 * sampling_steps * recycling_steps
-    total_min = min_per_cand * n_sequences
+    # Coefficients calibrated from observed runs (cached MSA, boltz1, Apple M-series):
+    #   inference : ~0.008 min / (step × recycling)
+    #   MSA fetch : ~3 min/candidate on first run (ColabFold API), ~0 if cached
+    min_per_cand_cached   = 0.008 * sampling_steps * recycling_steps
+    min_per_cand_uncached = 3.0 + min_per_cand_cached
+    total_cached   = min_per_cand_cached   * n_sequences
+    total_uncached = min_per_cand_uncached * n_sequences
 
     def _fmt_time(minutes: float) -> str:
         if minutes < 60:
@@ -440,10 +445,37 @@ def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps:
         m = int(minutes % 60)
         return f"~{h}h {m}m" if m else f"~{h}h"
 
+    # Show actual elapsed time from last run if available
+    last_result = st.session_state.get("pipeline_result")
+    if last_result is not None and getattr(last_result, "elapsed_seconds", 0) > 0:
+        elapsed_sec = last_result.elapsed_seconds
+        if elapsed_sec < 60:
+            elapsed_str = f"{elapsed_sec:.0f} 秒"
+        elif elapsed_sec < 3600:
+            elapsed_str = f"{elapsed_sec / 60:.1f} 分"
+        else:
+            h = int(elapsed_sec // 3600)
+            m = int((elapsed_sec % 3600) / 60)
+            elapsed_str = f"{h}h {m}m"
+        last_n = getattr(getattr(last_result, "config", None), "n_sequences", "?")
+        time_block = (
+            f"**前回の実績時間**  \n"
+            f"{last_n} 候補: **{elapsed_str}**  \n\n"
+            f"**Estimated time (Apple Silicon MPS, 今回)**  \n"
+            f"Per candidate: {_fmt_time(min_per_cand_cached)} (MSA キャッシュ済) "
+            f"/ {_fmt_time(min_per_cand_uncached)} (初回)  \n"
+            f"Total ({n_sequences} candidates): **{_fmt_time(total_cached)}** – **{_fmt_time(total_uncached)}**"
+        )
+    else:
+        time_block = (
+            f"**Estimated time (Apple Silicon MPS)**  \n"
+            f"Per candidate: {_fmt_time(min_per_cand_cached)} (MSA キャッシュ済) "
+            f"/ {_fmt_time(min_per_cand_uncached)} (初回)  \n"
+            f"Total ({n_sequences} candidates): **{_fmt_time(total_cached)}** – **{_fmt_time(total_uncached)}**"
+        )
+
     st.info(
         f"{quality_icon} **Quality: {quality}**  \n"
         f"{ipsae_note}  \n\n"
-        f"**Estimated time (CPU)**  \n"
-        f"Per candidate: {_fmt_time(min_per_cand)}  \n"
-        f"Total ({n_sequences} candidates): **{_fmt_time(total_min)}**"
+        f"{time_block}"
     )
