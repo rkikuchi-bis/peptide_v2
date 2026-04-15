@@ -236,6 +236,7 @@ def predict_complex(
         "--output_format", "mmcif",
         "--use_msa_server",
         "--override",
+        "--num_workers", "0",    # disable dataloader workers to reduce RAM usage
     ]
     if seed is not None:
         cmd += ["--seed", str(seed)]
@@ -393,6 +394,7 @@ def predict_batch(
         "--output_format", "mmcif",
         "--use_msa_server",
         "--override",
+        "--num_workers", "0",    # disable dataloader workers to reduce RAM usage
     ]
     if seed is not None:
         cmd += ["--seed", str(seed)]

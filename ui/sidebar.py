@@ -173,7 +173,7 @@ def render_sidebar() -> dict:
         st.markdown("### Sequence generation")
 
         if mode == "Simple":
-            n_sequences = st.slider("Candidates", min_value=5, max_value=50, value=10, step=5)
+            n_sequences = st.slider("Candidates", min_value=5, max_value=50, value=5, step=5)
             peptide_length = st.slider("Peptide length (aa)", min_value=6, max_value=20, value=12)
             mpnn_temperature = 0.3
         else:
