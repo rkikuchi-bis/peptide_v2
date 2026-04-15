@@ -50,6 +50,7 @@ class PipelineConfig:
     boltz_sampling_steps: int = 10
     boltz_diffusion_samples: int = 1
     boltz_seed: Optional[int] = 42
+    boltz_skip_msa: bool = True  # skip receptor MSA fetch (Simple mode default)
 
     # Output
     out_dir: Path = field(default_factory=lambda: Path(f"/tmp/peptide_v2_{uuid.uuid4().hex[:8]}"))
@@ -172,6 +173,7 @@ def run_pipeline(
             sampling_steps=config.boltz_sampling_steps,
             diffusion_samples=config.boltz_diffusion_samples,
             seed=config.boltz_seed,
+            skip_msa=config.boltz_skip_msa,
         )
         result.raw_predictions = raw_predictions
 

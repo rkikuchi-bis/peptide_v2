@@ -123,27 +123,33 @@ def _build_boltz_yaml(
     peptide_sequence: str,
     receptor_chain_id: str = "A",
     peptide_chain_id: str = "B",
+    skip_receptor_msa: bool = False,
 ) -> dict:
     """Build Boltz-2 YAML input dict for receptor + peptide complex.
 
-    Peptide MSA is explicitly disabled (msa: null) because:
-      - Designed peptides are unique sequences with no homologs in MSA databases.
-      - MSA server fetch per peptide is the dominant runtime cost (1-3 min each).
-      - Receptor MSA is still fetched via --use_msa_server (important for accuracy).
+    Peptide MSA is always disabled (msa: null) because designed peptides are
+    unique sequences with no homologs in MSA databases.
+
+    Receptor MSA is fetched by default (improves accuracy) but can be skipped
+    with skip_receptor_msa=True for faster runs (Simple mode / Colab).
+    MSA server fetch for the receptor is the dominant runtime cost (~5-8 min
+    on first run); skipping it makes Simple mode truly offline and fast.
     """
+    receptor_entry: dict = {
+        "id": receptor_chain_id,
+        "sequence": receptor_sequence,
+    }
+    if skip_receptor_msa:
+        receptor_entry["msa"] = None  # skip MSA server fetch for receptor
+
     return {
         "sequences": [
-            {
-                "protein": {
-                    "id": receptor_chain_id,
-                    "sequence": receptor_sequence,
-                }
-            },
+            {"protein": receptor_entry},
             {
                 "protein": {
                     "id": peptide_chain_id,
                     "sequence": peptide_sequence,
-                    "msa": None,  # skip MSA for designed peptides
+                    "msa": None,  # skip MSA for designed peptides (always)
                 }
             },
         ]
@@ -187,6 +193,7 @@ def predict_complex(
     sampling_steps: int = 10,
     diffusion_samples: int = 1,
     seed: Optional[int] = None,
+    skip_msa: bool = False,
 ) -> Dict:
     """Run Boltz-2 to predict receptor-peptide complex structure.
 
@@ -221,6 +228,7 @@ def predict_complex(
         peptide_sequence=peptide_sequence,
         receptor_chain_id=receptor_chain_id,
         peptide_chain_id=peptide_chain_id,
+        skip_receptor_msa=skip_msa,
     )
     input_dir = out_dir / "inputs"
     input_dir.mkdir(exist_ok=True)
@@ -231,6 +239,8 @@ def predict_complex(
     # Run Boltz via CLI (most stable interface)
     accelerator = _get_accelerator()
     boltz_out = out_dir / "boltz_output"
+    boltz_out.mkdir(parents=True, exist_ok=True)
+    log_path = boltz_out / "boltz.log"
 
     cmd = _boltz_cmd() + [
         str(yaml_path),
@@ -248,33 +258,29 @@ def predict_complex(
     if seed is not None:
         cmd += ["--seed", str(seed)]
 
+    # Write stdout+stderr to a log file to avoid PIPE buffer pressure in RAM.
+    # This also gives a debug artifact when boltz fails.
     try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=_boltz_env(),
-        )
-        stdout, stderr = proc.communicate(timeout=1800)  # 30 min max
+        with open(log_path, "w") as log_f:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                env=_boltz_env(),
+            )
+        proc.wait(timeout=1800)  # 30 min max
     except subprocess.TimeoutExpired:
         proc.kill()
-        proc.communicate()
+        proc.wait()
         raise RuntimeError(f"Boltz prediction timed out after 30 min for {job_id}")
 
-    class _Result:
-        def __init__(self, returncode, stdout, stderr):
-            self.returncode = returncode
-            self.stdout = stdout
-            self.stderr = stderr
-
-    result = _Result(proc.returncode, stdout, stderr)
-
-    if result.returncode != 0:
+    if proc.returncode != 0:
+        try:
+            log_tail = log_path.read_text()[-2000:]
+        except Exception:
+            log_tail = "(log unavailable)"
         raise RuntimeError(
-            f"Boltz-2 prediction failed for {job_id}:\n"
-            f"stdout: {result.stdout[-1000:]}\n"
-            f"stderr: {result.stderr[-1000:]}"
+            f"Boltz-2 prediction failed for {job_id}:\n{log_tail}"
         )
 
     # Locate output files
@@ -353,6 +359,7 @@ def predict_batch(
     sampling_steps: int = 10,
     diffusion_samples: int = 1,
     seed: Optional[int] = None,
+    skip_msa: bool = False,
 ) -> List[Dict]:
     """Predict complex structures for all peptide candidates in ONE boltz call.
 
@@ -378,6 +385,7 @@ def predict_batch(
             peptide_sequence=seq,
             receptor_chain_id=receptor_chain_id,
             peptide_chain_id=peptide_chain_id,
+            skip_receptor_msa=skip_msa,
         )
         yaml_path = input_dir / f"{job_id}.yaml"
         with open(yaml_path, "w") as f:
@@ -389,6 +397,8 @@ def predict_batch(
     # --- Single boltz call on the input directory ---
     accelerator = _get_accelerator()
     boltz_out = out_dir / "boltz_output"
+    boltz_out.mkdir(parents=True, exist_ok=True)
+    log_path = boltz_out / "boltz.log"
 
     cmd = _boltz_cmd() + [
         str(input_dir),          # directory → processes all YAMLs in one run
@@ -406,25 +416,29 @@ def predict_batch(
     if seed is not None:
         cmd += ["--seed", str(seed)]
 
+    # Write stdout+stderr to a log file to avoid PIPE buffer pressure in RAM.
+    # This also gives a debug artifact when boltz fails.
     try:
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=_boltz_env(),
-        )
-        stdout, stderr = proc.communicate(timeout=7200)  # 2 hour max for batch
+        with open(log_path, "w") as log_f:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                env=_boltz_env(),
+            )
+        proc.wait(timeout=7200)  # 2 hour max for batch
     except subprocess.TimeoutExpired:
         proc.kill()
-        proc.communicate()
+        proc.wait()
         raise RuntimeError("Boltz batch prediction timed out after 2 hours")
 
     if proc.returncode != 0:
+        try:
+            log_tail = log_path.read_text()[-2000:]
+        except Exception:
+            log_tail = "(log unavailable)"
         raise RuntimeError(
-            f"Boltz-2 batch prediction failed:\n"
-            f"stdout: {stdout[-1000:]}\n"
-            f"stderr: {stderr[-1000:]}"
+            f"Boltz-2 batch prediction failed:\n{log_tail}"
         )
 
     # When boltz is given a directory named "inputs", it creates boltz_results_inputs/

@@ -105,6 +105,7 @@ if run_button and sidebar["ready"] and not st.session_state["running"]:
         boltz_sampling_steps=sidebar["boltz_sampling_steps"],
         boltz_diffusion_samples=sidebar["boltz_diffusion_samples"],
         boltz_seed=sidebar["boltz_seed"],
+        boltz_skip_msa=sidebar["boltz_skip_msa"],
     )
     config.target_name = sidebar.get("target_name", "")
 

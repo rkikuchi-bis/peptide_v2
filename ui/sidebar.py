@@ -210,6 +210,9 @@ def render_sidebar() -> dict:
         result["boltz_sampling_steps"] = boltz_sampling
         result["boltz_diffusion_samples"] = boltz_samples
         result["boltz_seed"] = boltz_seed
+        # Simple mode skips receptor MSA fetch for speed (offline, ~5-8 min saved).
+        # Expert mode fetches receptor MSA for better structural accuracy.
+        result["boltz_skip_msa"] = (mode == "Simple")
 
         st.divider()
 
