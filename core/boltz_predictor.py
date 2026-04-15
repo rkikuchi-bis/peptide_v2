@@ -80,9 +80,12 @@ def compute_ipsae_from_pae(
 
 
 def _boltz_env() -> dict:
-    """Environment for boltz subprocess with MPS fallback enabled."""
+    """Environment for boltz subprocess with MPS fallback and CUDA memory opts."""
     env = deepcopy(os.environ)
     env["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    # Reduce CUDA memory fragmentation (helps on T4 / limited-VRAM GPUs).
+    # expandable_segments lets PyTorch return fragmented blocks to the OS.
+    env.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     return env
 
 
