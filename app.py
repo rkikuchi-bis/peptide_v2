@@ -24,21 +24,30 @@ st.set_page_config(
 
 # ── Imports ───────────────────────────────────────────────────────────────────
 
-from pathlib import Path
-
-from core.pipeline import PipelineConfig, PipelineResult, run_pipeline
+from core.pipeline import PipelineConfig, run_pipeline
 from ui.sidebar import render_sidebar
 from ui.results import render_results
 from ui.structure_viewer import render_viewer_section
+
+
+def _is_colab() -> bool:
+    try:
+        import google.colab  # noqa: F401
+        return True
+    except ImportError:
+        return False
+
+
+# Colab needs a longer rerun interval to stay within the cache window.
+# Local (Mac) can poll faster for a snappier UI.
+_POLL_SECONDS = 10 if _is_colab() else 3
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
 for _k, _v in {
     "pipeline_result": None,
     "running": False,
-    "_bg_done": False,
-    "_bg_result": None,
-    "_bg_stage": "Initializing...",
+    "_bg_holder": None,   # plain dict shared with background thread
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -80,7 +89,7 @@ with run_col:
 if not sidebar["ready"] and not st.session_state["pipeline_result"]:
     st.info("Upload a structure file or search RCSB to get started.")
 
-# ── Pipeline execution (background thread) ────────────────────────────────────
+# ── Pipeline execution ────────────────────────────────────────────────────────
 
 if run_button and sidebar["ready"] and not st.session_state["running"]:
     config = PipelineConfig(
@@ -99,42 +108,40 @@ if run_button and sidebar["ready"] and not st.session_state["running"]:
     )
     config.target_name = sidebar.get("target_name", "")
 
+    # Use a plain dict as a thread-safe result holder.
+    # The background thread writes only to this dict (never to st.session_state)
+    # to avoid ScriptRunContext warnings.
+    holder = {"done": False, "result": None, "stage": "Initializing..."}
+    st.session_state["_bg_holder"] = holder
     st.session_state["running"] = True
     st.session_state["pipeline_result"] = None
-    st.session_state["_bg_done"] = False
-    st.session_state["_bg_result"] = None
-    st.session_state["_bg_stage"] = "Starting..."
 
-    def _run_bg(cfg):
+    def _run_bg(cfg, h):
         def _progress(stage, current=0, total=1):
-            st.session_state["_bg_stage"] = stage
+            h["stage"] = stage  # plain dict mutation — no Streamlit calls
 
-        result = run_pipeline(config=cfg, progress_callback=_progress)
-        st.session_state["_bg_result"] = result
-        st.session_state["_bg_done"] = True
+        h["result"] = run_pipeline(config=cfg, progress_callback=_progress)
+        h["done"] = True
 
-    threading.Thread(target=_run_bg, args=(config,), daemon=True).start()
+    threading.Thread(target=_run_bg, args=(config, holder), daemon=True).start()
     st.rerun()
 
 # ── Polling loop while pipeline is running ────────────────────────────────────
 
 if st.session_state["running"]:
-    if st.session_state["_bg_done"]:
-        # Pipeline finished — collect result
-        st.session_state["pipeline_result"] = st.session_state["_bg_result"]
+    holder = st.session_state["_bg_holder"]
+    if holder["done"]:
+        st.session_state["pipeline_result"] = holder["result"]
         st.session_state["running"] = False
-        st.session_state["_bg_done"] = False
-        st.session_state["_bg_result"] = None
+        st.session_state["_bg_holder"] = None
         st.rerun()
     else:
-        # Still running — show status and rerun every 10 s to keep WS alive
-        stage = st.session_state.get("_bg_stage", "Running...")
-        st.info(f"**{stage}**  \nStreamlit との接続を維持中... 完了まで自動更新します。")
-        st.spinner("Running pipeline…")
-        time.sleep(10)
+        stage = holder.get("stage", "Running...")
+        with st.spinner(f"{stage}"):
+            time.sleep(_POLL_SECONDS)
         st.rerun()
 
-# ── Results display ────────────────────────────────────────────────────────────
+# ── Results display ───────────────────────────────────────────────────────────
 
 if st.session_state["pipeline_result"] is not None:
     st.divider()
