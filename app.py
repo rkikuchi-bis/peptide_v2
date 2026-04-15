@@ -8,6 +8,9 @@ Reference:
   Watson et al. bioRxiv 2026.03.14.711748
 """
 
+import threading
+import time
+
 import streamlit as st
 
 # ── Page config ───────────────────────────────────────────────────────────────
@@ -30,10 +33,15 @@ from ui.structure_viewer import render_viewer_section
 
 # ── Session state ─────────────────────────────────────────────────────────────
 
-if "pipeline_result" not in st.session_state:
-    st.session_state["pipeline_result"] = None
-if "running" not in st.session_state:
-    st.session_state["running"] = False
+for _k, _v in {
+    "pipeline_result": None,
+    "running": False,
+    "_bg_done": False,
+    "_bg_result": None,
+    "_bg_stage": "Initializing...",
+}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 
@@ -72,12 +80,9 @@ with run_col:
 if not sidebar["ready"] and not st.session_state["pipeline_result"]:
     st.info("Upload a structure file or search RCSB to get started.")
 
-# ── Pipeline execution ────────────────────────────────────────────────────────
+# ── Pipeline execution (background thread) ────────────────────────────────────
 
 if run_button and sidebar["ready"] and not st.session_state["running"]:
-    st.session_state["running"] = True
-    st.session_state["pipeline_result"] = None
-
     config = PipelineConfig(
         structure=sidebar["structure"],
         structure_bytes=sidebar["structure_bytes"],
@@ -92,37 +97,42 @@ if run_button and sidebar["ready"] and not st.session_state["running"]:
         boltz_diffusion_samples=sidebar["boltz_diffusion_samples"],
         boltz_seed=sidebar["boltz_seed"],
     )
-    # Attach target name for CSV download filename
     config.target_name = sidebar.get("target_name", "")
 
-    # Progress display
-    progress_placeholder = st.empty()
-    progress_bar = st.progress(0)
-    stages = [
-        "Analyzing binding pocket...",
-        "Extracting receptor sequence...",
-        "Generating peptide sequences (ProteinMPNN)...",
-        "Predicting complex structures (Boltz-2)...",
-        "Scoring with PRODIGY (ΔG / Kd)...",
-    ]
+    st.session_state["running"] = True
+    st.session_state["pipeline_result"] = None
+    st.session_state["_bg_done"] = False
+    st.session_state["_bg_result"] = None
+    st.session_state["_bg_stage"] = "Starting..."
 
-    def progress_callback(stage: str, current: int, total: int):
-        try:
-            idx = stages.index(stage)
-        except ValueError:
-            idx = current
-        frac = min(idx / max(len(stages), 1), 1.0)
-        progress_bar.progress(frac)
-        progress_placeholder.info(f"**{stage}**  ({current}/{total})" if total > 1 else f"**{stage}**")
+    def _run_bg(cfg):
+        def _progress(stage, current=0, total=1):
+            st.session_state["_bg_stage"] = stage
 
-    with st.spinner("Running pipeline…"):
-        result = run_pipeline(config=config, progress_callback=progress_callback)
+        result = run_pipeline(config=cfg, progress_callback=_progress)
+        st.session_state["_bg_result"] = result
+        st.session_state["_bg_done"] = True
 
-    progress_bar.progress(1.0)
-    progress_placeholder.empty()
-    st.session_state["pipeline_result"] = result
-    st.session_state["running"] = False
+    threading.Thread(target=_run_bg, args=(config,), daemon=True).start()
     st.rerun()
+
+# ── Polling loop while pipeline is running ────────────────────────────────────
+
+if st.session_state["running"]:
+    if st.session_state["_bg_done"]:
+        # Pipeline finished — collect result
+        st.session_state["pipeline_result"] = st.session_state["_bg_result"]
+        st.session_state["running"] = False
+        st.session_state["_bg_done"] = False
+        st.session_state["_bg_result"] = None
+        st.rerun()
+    else:
+        # Still running — show status and rerun every 10 s to keep WS alive
+        stage = st.session_state.get("_bg_stage", "Running...")
+        st.info(f"**{stage}**  \nStreamlit との接続を維持中... 完了まで自動更新します。")
+        st.spinner("Running pipeline…")
+        time.sleep(10)
+        st.rerun()
 
 # ── Results display ────────────────────────────────────────────────────────────
 
