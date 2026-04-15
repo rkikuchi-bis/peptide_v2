@@ -429,11 +429,24 @@ def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps:
         quality_icon = "✅"
         ipsae_note = "最高品質（CPU では非常に長時間）"
 
-    # Estimated time (CPU)
-    # Coefficients calibrated from observed runs (cached MSA, boltz1, Apple M-series):
-    #   inference : ~0.008 min / (step × recycling)
-    #   MSA fetch : ~3 min/candidate on first run (ColabFold API), ~0 if cached
-    min_per_cand_cached   = 0.008 * sampling_steps * recycling_steps
+    # アクセラレータ名を自動検出
+    try:
+        import torch
+        if torch.cuda.is_available():
+            accel_label = "GPU (CUDA)"
+        elif torch.backends.mps.is_available():
+            accel_label = "Apple Silicon MPS"
+        else:
+            accel_label = "CPU"
+    except Exception:
+        accel_label = "CPU"
+
+    # 推定時間の係数（boltz1, キャッシュ済 MSA 基準）
+    #   GPU (CUDA): ~10x faster than MPS → 0.0008 min / (step × recycling)
+    #   Apple Silicon MPS: ~0.008 min / (step × recycling)
+    #   CPU: ~0.035 min / (step × recycling)
+    coeff = {"GPU (CUDA)": 0.0008, "Apple Silicon MPS": 0.008, "CPU": 0.035}.get(accel_label, 0.008)
+    min_per_cand_cached   = coeff * sampling_steps * recycling_steps
     min_per_cand_uncached = 3.0 + min_per_cand_cached
     total_cached   = min_per_cand_cached   * n_sequences
     total_uncached = min_per_cand_uncached * n_sequences
@@ -445,7 +458,7 @@ def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps:
         m = int(minutes % 60)
         return f"~{h}h {m}m" if m else f"~{h}h"
 
-    # Show actual elapsed time from last run if available
+    # 前回の実績時間（あれば表示）
     last_result = st.session_state.get("pipeline_result")
     if last_result is not None and getattr(last_result, "elapsed_seconds", 0) > 0:
         elapsed_sec = last_result.elapsed_seconds
@@ -461,14 +474,14 @@ def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps:
         time_block = (
             f"**前回の実績時間**  \n"
             f"{last_n} 候補: **{elapsed_str}**  \n\n"
-            f"**Estimated time (Apple Silicon MPS, 今回)**  \n"
+            f"**Estimated time ({accel_label}, 今回)**  \n"
             f"Per candidate: {_fmt_time(min_per_cand_cached)} (MSA キャッシュ済) "
             f"/ {_fmt_time(min_per_cand_uncached)} (初回)  \n"
             f"Total ({n_sequences} candidates): **{_fmt_time(total_cached)}** – **{_fmt_time(total_uncached)}**"
         )
     else:
         time_block = (
-            f"**Estimated time (Apple Silicon MPS)**  \n"
+            f"**Estimated time ({accel_label})**  \n"
             f"Per candidate: {_fmt_time(min_per_cand_cached)} (MSA キャッシュ済) "
             f"/ {_fmt_time(min_per_cand_uncached)} (初回)  \n"
             f"Total ({n_sequences} candidates): **{_fmt_time(total_cached)}** – **{_fmt_time(total_uncached)}**"
