@@ -89,8 +89,8 @@ def render_sidebar() -> dict:
             horizontal=True,
             key="sidebar_mode",
             help=(
-                "Simple: 構造をアップロードして Run するだけ。\n"
-                "Expert: ProteinMPNN・Boltz-2 のパラメータを手動調整できます。"
+                "Simple: Upload a structure and click Run.\n"
+                "Expert: Manually adjust ProteinMPNN and Boltz-2 parameters."
             ),
         )
         st.divider()
@@ -99,7 +99,7 @@ def render_sidebar() -> dict:
         target_name = st.text_input(
             "Project name",
             value="",
-            placeholder="例: MDM2 (空白可)",
+            placeholder="e.g. MDM2 (optional)",
         )
         result["target_name"] = target_name
 
@@ -414,25 +414,25 @@ def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps:
     if sampling_steps <= 10:
         quality = "Demo only"
         quality_icon = "⚠️"
-        ipsae_note = "iPSAE スコアは信頼できません（収束不十分）"
+        ipsae_note = "iPSAE scores are unreliable (insufficient convergence)"
     elif sampling_steps <= 30:
         quality = "Low quality"
         quality_icon = "⚠️"
-        ipsae_note = "iPSAE が閾値 0.5 を下回る可能性があります"
+        ipsae_note = "iPSAE may fall below the 0.5 threshold"
     elif sampling_steps <= 75:
         quality = "Minimum usable"
         quality_icon = "ℹ️"
-        ipsae_note = "iPSAE の信頼性が確保できる最低ライン"
+        ipsae_note = "Minimum setting for reliable iPSAE scores"
     elif sampling_steps <= 150:
         quality = "Good quality"
         quality_icon = "✅"
-        ipsae_note = "信頼性の高い iPSAE スコアが期待できます"
+        ipsae_note = "Reliable iPSAE scores expected"
     else:
         quality = "Production quality"
         quality_icon = "✅"
-        ipsae_note = "最高品質（CPU では非常に長時間）"
+        ipsae_note = "Highest quality (very slow on CPU)"
 
-    # アクセラレータ名を自動検出
+    # Auto-detect accelerator
     try:
         import torch
         if torch.cuda.is_available():
@@ -444,7 +444,7 @@ def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps:
     except Exception:
         accel_label = "CPU"
 
-    # 推定時間の係数（boltz1, キャッシュ済 MSA 基準）
+    # Time estimate coefficients (boltz1, cached MSA baseline)
     #   GPU (CUDA): ~10x faster than MPS → 0.0008 min / (step × recycling)
     #   Apple Silicon MPS: ~0.008 min / (step × recycling)
     #   CPU: ~0.035 min / (step × recycling)
@@ -461,32 +461,32 @@ def _render_run_estimate(n_sequences: int, sampling_steps: int, recycling_steps:
         m = int(minutes % 60)
         return f"~{h}h {m}m" if m else f"~{h}h"
 
-    # 前回の実績時間（あれば表示）
+    # Show last run time if available
     last_result = st.session_state.get("pipeline_result")
     if last_result is not None and getattr(last_result, "elapsed_seconds", 0) > 0:
         elapsed_sec = last_result.elapsed_seconds
         if elapsed_sec < 60:
-            elapsed_str = f"{elapsed_sec:.0f} 秒"
+            elapsed_str = f"{elapsed_sec:.0f} sec"
         elif elapsed_sec < 3600:
-            elapsed_str = f"{elapsed_sec / 60:.1f} 分"
+            elapsed_str = f"{elapsed_sec / 60:.1f} min"
         else:
             h = int(elapsed_sec // 3600)
             m = int((elapsed_sec % 3600) / 60)
             elapsed_str = f"{h}h {m}m"
         last_n = getattr(getattr(last_result, "config", None), "n_sequences", "?")
         time_block = (
-            f"**前回の実績時間**  \n"
-            f"{last_n} 候補: **{elapsed_str}**  \n\n"
-            f"**Estimated time ({accel_label}, 今回)**  \n"
-            f"Per candidate: {_fmt_time(min_per_cand_cached)} (MSA キャッシュ済) "
-            f"/ {_fmt_time(min_per_cand_uncached)} (初回)  \n"
+            f"**Last run time**  \n"
+            f"{last_n} candidates: **{elapsed_str}**  \n\n"
+            f"**Estimated time ({accel_label}, current)**  \n"
+            f"Per candidate: {_fmt_time(min_per_cand_cached)} (MSA cached) "
+            f"/ {_fmt_time(min_per_cand_uncached)} (first run)  \n"
             f"Total ({n_sequences} candidates): **{_fmt_time(total_cached)}** – **{_fmt_time(total_uncached)}**"
         )
     else:
         time_block = (
             f"**Estimated time ({accel_label})**  \n"
-            f"Per candidate: {_fmt_time(min_per_cand_cached)} (MSA キャッシュ済) "
-            f"/ {_fmt_time(min_per_cand_uncached)} (初回)  \n"
+            f"Per candidate: {_fmt_time(min_per_cand_cached)} (MSA cached) "
+            f"/ {_fmt_time(min_per_cand_uncached)} (first run)  \n"
             f"Total ({n_sequences} candidates): **{_fmt_time(total_cached)}** – **{_fmt_time(total_uncached)}**"
         )
 

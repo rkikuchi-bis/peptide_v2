@@ -153,7 +153,7 @@ def detect_structure_format(filename: str) -> str:
 
 
 def get_recommended_chain(structure) -> str | None:
-    """最も標準アミノ酸残基が多いチェーンを返す（Simple mode 自動選択用）"""
+    """Return the chain with the most standard amino acid residues (used for Simple mode auto-selection)."""
     best_chain = None
     best_count = 0
     for model in structure:
@@ -353,10 +353,10 @@ def get_pocket_ca_centroid(
     pdb_summary: Dict,
 ) -> tuple[float, float, float] | None:
     """
-    pdb_summary に基づいてポケット残基の Cα 重心座標を返す。
+    Return the Cα centroid coordinates of pocket residues based on pdb_summary.
 
     Returns:
-        (x, y, z) または None（ポケット残基が見つからない場合）
+        (x, y, z) or None if no pocket residues are found.
     """
     source_mode = pdb_summary.get("source_mode", "manual_region")
     selected_chain = pdb_summary.get("selected_chain")
@@ -368,7 +368,7 @@ def get_pocket_ca_centroid(
     ca_coords = []
 
     if source_mode == "ligand_neighborhood" and ligand_names:
-        # リガンド近傍モード: NeighborSearch で残基を取得
+        # Ligand neighborhood mode: retrieve residues via NeighborSearch
         ligand_resname = ligand_names[0]
         ligand_residue = None
         for model in structure:
@@ -401,7 +401,7 @@ def get_pocket_ca_centroid(
                     if "CA" in residue:
                         ca_coords.append(residue["CA"].coord)
     else:
-        # Manual region モード
+        # Manual region mode
         for model in structure:
             for chain in model:
                 if selected_chain is not None and chain.id != selected_chain:

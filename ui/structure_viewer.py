@@ -1,12 +1,12 @@
 import streamlit as st
 
 
-# カラーパレット
-_COLOR_OTHER_CHAINS = "#bbbbbb"   # 非選択チェーン：薄いグレー
-_COLOR_SELECTED_CHAIN = "#5b9bd5"  # 選択チェーン：ブルー
-_COLOR_POCKET_STICK = "orangeCarbon"  # ポケット残基：オレンジ
-_COLOR_LIGAND = "greenCarbon"         # リガンド：グリーン
-_COLOR_PEPTIDE = "#ff00ff"            # ペプチド候補：マゼンタ（スティックの酸素赤と区別）
+# Color palette
+_COLOR_OTHER_CHAINS = "#bbbbbb"   # Non-selected chains: light grey
+_COLOR_SELECTED_CHAIN = "#5b9bd5"  # Selected chain: blue
+_COLOR_POCKET_STICK = "orangeCarbon"  # Pocket residues: orange
+_COLOR_LIGAND = "greenCarbon"         # Ligand: green
+_COLOR_PEPTIDE = "#ff00ff"            # Peptide candidate: magenta (distinct from stick oxygen red)
 _POCKET_SURFACE_OPACITY = 0.25
 
 
@@ -18,7 +18,7 @@ def _file_format(filename: str) -> str:
 
 
 def _resi_range(pdb_summary: dict) -> tuple[int | None, int | None]:
-    """ポケット残基の開始・終了番号を返す（なければ None）。"""
+    """Return the start and end residue numbers of the pocket (None if not available)."""
     start = pdb_summary.get("residue_start") or pdb_summary.get("used_residue_min")
     end = pdb_summary.get("residue_end") or pdb_summary.get("used_residue_max")
     return start, end
@@ -34,18 +34,18 @@ def render_structure_viewer(
     pocket_centroid=None,
 ) -> None:
     """
-    py3Dmol を使ってタンパク質構造を 3D 表示する。
+    Render a protein structure in 3D using py3Dmol.
 
-    - 全チェーン：薄いグレーのカートゥーン
-    - 選択チェーン：ブルーのカートゥーン
-    - ポケット領域（manual_region）：オレンジのスティック＋半透明サーフェス
-    - リガンド（ligand_neighborhood）：グリーンのスティック
-    - ペプチド候補（rank 1）：赤色スティック（理想ヘリックス骨格）
+    - All chains: light grey cartoon
+    - Selected chain: blue cartoon
+    - Pocket region (manual_region): orange sticks + translucent surface
+    - Ligand (ligand_neighborhood): green sticks
+    - Peptide candidate (rank 1): magenta sticks (ideal helix backbone)
     """
     try:
         import py3Dmol
     except ImportError:
-        st.warning("py3Dmol がインストールされていません。`uv add py3Dmol` を実行してください。")
+        st.warning("py3Dmol is not installed. Run `uv add py3Dmol`.")
         return
 
     structure_text = structure_bytes.decode("utf-8", errors="ignore")
@@ -54,30 +54,30 @@ def render_structure_viewer(
     view = py3Dmol.view(width=width, height=height)
     view.addModel(structure_text, fmt)
 
-    # ── ベーススタイル：全体をグレーのカートゥーン ──
+    # ── Base style: all chains as grey cartoon ──
     view.setStyle({}, {"cartoon": {"color": _COLOR_OTHER_CHAINS, "opacity": 0.6}})
 
     selected_chain = pdb_summary.get("selected_chain")
     source_mode = pdb_summary.get("source_mode", "manual_region")
 
-    # ── 選択チェーン：ブルーのカートゥーン ──
+    # ── Selected chain: blue cartoon ──
     if selected_chain:
         view.setStyle(
             {"chain": selected_chain},
             {"cartoon": {"color": _COLOR_SELECTED_CHAIN}},
         )
 
-    # ── ポケット強調 ──
+    # ── Pocket highlight ──
     if source_mode == "manual_region" and selected_chain:
         res_start, res_end = _resi_range(pdb_summary)
         if res_start is not None and res_end is not None:
             resi_str = f"{int(res_start)}-{int(res_end)}"
             pocket_sel = {"chain": selected_chain, "resi": resi_str}
 
-            # スティック表示
+            # Stick representation
             view.addStyle(pocket_sel, {"stick": {"colorscheme": _COLOR_POCKET_STICK, "radius": 0.25}})
 
-            # 半透明サーフェス
+            # Translucent surface
             view.addSurface(
                 py3Dmol.VDW,
                 {"opacity": _POCKET_SURFACE_OPACITY, "color": "orange"},
@@ -87,11 +87,11 @@ def render_structure_viewer(
     elif source_mode == "ligand_neighborhood":
         ligand_names = pdb_summary.get("ligand_names", [])
 
-        # リガンドをグリーンのスティックで表示
+        # Ligand as green sticks
         for lig in ligand_names:
             view.addStyle({"resn": lig}, {"stick": {"colorscheme": _COLOR_LIGAND, "radius": 0.4}})
 
-        # ポケット残基（おおよその範囲）をオレンジのスティックで表示
+        # Pocket residues (approximate range) as orange sticks
         res_start, res_end = _resi_range(pdb_summary)
         if selected_chain and res_start is not None and res_end is not None:
             resi_str = f"{int(res_start)}-{int(res_end)}"
@@ -100,19 +100,19 @@ def render_structure_viewer(
                 {"stick": {"colorscheme": _COLOR_POCKET_STICK, "radius": 0.2, "opacity": 0.6}},
             )
 
-    # ── ペプチド候補の重畳表示（理想ヘリックス骨格） ──
+    # ── Overlay peptide candidate (ideal helix backbone) ──
     if peptide_sequence and pocket_centroid is not None:
         try:
             from core.helix_utils import helix_coords_to_pdb
             pep_pdb = helix_coords_to_pdb(peptide_sequence, pocket_centroid, chain_id="P")
             view.addModel(pep_pdb, "pdb")
-            # color キーで全原子を単色マゼンタに固定（CPKカラーリングを上書き）
+            # Fix all atoms to solid magenta (overrides CPK coloring)
             view.addStyle(
                 {"chain": "P"},
                 {"stick": {"color": _COLOR_PEPTIDE, "radius": 0.3}},
             )
         except Exception:
-            pass  # ペプチド表示が失敗しても受容体は表示する
+            pass  # Receptor is still shown even if peptide overlay fails
 
     view.zoomTo()
     view.spin(False)
@@ -129,21 +129,21 @@ def render_viewer_section(
     pocket_centroid=None,
 ) -> None:
     """
-    app.py から呼ぶエントリポイント。
-    構造が読み込まれているときだけビューアを表示する。
+    Entry point called from app.py.
+    Displays the viewer only when a structure is loaded.
 
-    result_df と pocket_centroid が揃っていれば、rank 1 候補を
-    理想ヘリックスとして重畳表示する。
+    If result_df and pocket_centroid are provided, overlays the rank 1
+    candidate as an ideal helix.
     """
     if structure_bytes is None or pdb_summary is None:
         return
 
-    # 表示するペプチド配列を "Top candidate details" の Select rank から取得
+    # Retrieve peptide sequence from "viewer_selected_rank" session state
     peptide_sequence: str | None = None
     selected_rank: int = 1
     if result_df is not None and pocket_centroid is not None and len(result_df) > 0:
         raw_rank = st.session_state.get("viewer_selected_rank", 1)
-        # 範囲外のランク（別 Run 後の残留値）を安全にクランプ
+        # Clamp rank to valid range (stale value after a new run)
         selected_rank = max(1, min(int(raw_rank), len(result_df)))
         rank_col = result_df["rank"] if "rank" in result_df.columns else None
         if rank_col is not None:
@@ -161,21 +161,21 @@ def render_viewer_section(
         res_start, res_end = _resi_range(pdb_summary)
         ligands = pdb_summary.get("ligand_names", [])
 
-        # 凡例
+        # Legend
         legend_parts = [
-            "🔵 選択チェーン",
-            "🟠 ポケット領域",
+            "🔵 Selected chain",
+            "🟠 Pocket region",
         ]
         if ligands:
-            legend_parts.append("🟢 リガンド")
+            legend_parts.append("🟢 Ligand")
         if peptide_sequence:
-            legend_parts.append(f"🟣 ペプチド候補 (rank {selected_rank})")
+            legend_parts.append(f"🟣 Peptide candidate (rank {selected_rank})")
         st.caption(
             f"Chain: **{chain}** | Mode: **{mode}**"
             + (f" | Residues: {res_start}–{res_end}" if res_start and res_end else "")
             + (f" | Ligand: {', '.join(ligands)}" if ligands else "")
             + (f" | 🟣 Peptide rank {selected_rank}: **{peptide_sequence}**" if peptide_sequence else "")
-            + f"　　{'  '.join(legend_parts)}"
+            + f"    {'  '.join(legend_parts)}"
         )
 
         render_structure_viewer(
