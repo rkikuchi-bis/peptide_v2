@@ -48,6 +48,8 @@ for _k, _v in {
     "pipeline_result": None,
     "running": False,
     "_bg_holder": None,   # plain dict shared with background thread
+    "_run_start": None,   # time.time() when run started
+    "_n_sequences": None, # number of candidates (for Boltz-2 time estimate)
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -112,14 +114,19 @@ if run_button and sidebar["ready"] and not st.session_state["running"]:
     # Use a plain dict as a thread-safe result holder.
     # The background thread writes only to this dict (never to st.session_state)
     # to avoid ScriptRunContext warnings.
-    holder = {"done": False, "result": None, "stage": "Initializing..."}
+    holder = {"done": False, "result": None, "stage": "Initializing...", "boltz_start": None}
     st.session_state["_bg_holder"] = holder
     st.session_state["running"] = True
     st.session_state["pipeline_result"] = None
+    st.session_state["_run_start"] = time.time()
+    st.session_state["_n_sequences"] = config.n_sequences
 
     def _run_bg(cfg, h):
         def _progress(stage, current=0, total=1):
             h["stage"] = stage  # plain dict mutation — no Streamlit calls
+            # Record when Boltz-2 batch starts (for time-based progress interpolation)
+            if "Predicting" in stage and h["boltz_start"] is None:
+                h["boltz_start"] = time.time()
 
         try:
             h["result"] = run_pipeline(config=cfg, progress_callback=_progress)
@@ -140,8 +147,48 @@ if st.session_state["running"]:
         st.rerun()
     else:
         stage = holder.get("stage", "Running...")
-        with st.spinner(f"{stage}"):
-            time.sleep(_POLL_SECONDS)
+        elapsed = time.time() - (st.session_state["_run_start"] or time.time())
+        n_seq = st.session_state["_n_sequences"] or 10
+        boltz_start = holder.get("boltz_start")
+
+        # Compute progress value [0, 1]
+        stage_l = stage.lower()
+        if "analyzing" in stage_l or "extracting" in stage_l:
+            progress = 0.08
+        elif "generating" in stage_l:
+            progress = 0.18
+        elif "predicting" in stage_l:
+            # Time-interpolate 20%→85% over estimated Boltz duration (3 min/candidate)
+            if boltz_start is not None:
+                boltz_elapsed = time.time() - boltz_start
+                est_total = n_seq * 180  # 3 min per candidate (seconds)
+                fraction = min(0.95, boltz_elapsed / max(est_total, 1))
+            else:
+                fraction = 0.0
+            progress = 0.20 + fraction * 0.65
+        elif "boltz-2" in stage_l:
+            progress = 0.88
+        elif "scoring" in stage_l or "prodigy" in stage_l:
+            progress = 0.93
+        else:
+            progress = 0.03
+
+        # Elapsed time string
+        m, s = int(elapsed // 60), int(elapsed % 60)
+        elapsed_str = f"{m}m {s}s" if m > 0 else f"{s}s"
+
+        st.progress(progress, text=f"{stage}  ({elapsed_str} elapsed)")
+
+        # Extra hint during the long Boltz-2 batch
+        if "predicting" in stage_l:
+            est_min = n_seq * 3
+            if boltz_start is not None:
+                remaining = max(0, est_min - (time.time() - boltz_start) / 60)
+                st.caption(f"Boltz-2 is processing {n_seq} candidates — est. {remaining:.0f} min remaining")
+            else:
+                st.caption(f"Boltz-2 is processing {n_seq} candidates — est. {est_min} min total")
+
+        time.sleep(_POLL_SECONDS)
         st.rerun()
 
 # ── Results display ───────────────────────────────────────────────────────────
