@@ -16,7 +16,7 @@ import streamlit as st
 # ── Page config ───────────────────────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Peptide Discovery v2",
+    page_title="Peptide Hit Prioritization",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -60,7 +60,7 @@ sidebar = render_sidebar()
 
 # ── Main area ─────────────────────────────────────────────────────────────────
 
-st.title("Peptide Discovery")
+st.title("Peptide Hit Prioritization")
 st.caption(
     "Structure-based peptide binder design using ProteinMPNN + Boltz-2 + PRODIGY.  \n"
     "Two-axis scoring: **iPSAE** (Boltz-2 interface confidence) × **ΔG** (PRODIGY thermodynamics)."

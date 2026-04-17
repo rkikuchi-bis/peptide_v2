@@ -1,4 +1,4 @@
-# Peptide Discovery v2
+# Peptide Hit Prioritization v2
 
 Structure-based peptide binder design powered by **ProteinMPNN + Boltz-1 + PRODIGY**.  
 Two-axis scoring: **iPSAE** (interface structural confidence) × **ΔG** (binding free energy).
@@ -198,7 +198,7 @@ This project integrates the following open-source tools:
 ---
 ---
 
-# Peptide Discovery v2（日本語）
+# Peptide Hit Prioritization v2（日本語）
 
 **ProteinMPNN + Boltz-1 + PRODIGY** による構造ベースのペプチドバインダー探索アプリです。  
 **iPSAE**（界面構造信頼性）× **ΔG**（結合自由エネルギー）の二軸スコアリングを実装しています。
