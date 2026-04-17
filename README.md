@@ -91,6 +91,13 @@ A public URL via cloudflared is displayed after Cell 6.
 > **Note:** CUDA (Colab T4) is the reference environment for research-quality scores.  
 > Mac (MPS) produces numerically different results due to hardware differences — use Mac for development and UI testing only.
 
+### Recommended Use
+
+- Use **Apple Silicon Mac** for development, UI testing, preprocessing, and exploratory runs.
+- Use **Google Colab with CUDA** for final candidate generation and scoring intended for scientific interpretation.
+- Treat **iPSAE** and **ΔG** as computational estimates for candidate prioritization, not as experimental measurements.
+- For reports or research decisions, record the runtime environment, parameter set, and random seed for each run.
+
 ### Workflow
 
 1. **Upload or search** — upload a PDB/mmCIF file, or search RCSB by keyword
@@ -112,6 +119,8 @@ A public URL via cloudflared is displayed after Cell 6.
 | `seed` | 42 | 123 | Random seed for reproducibility |
 
 Expert mode defaults are empirically calibrated: `sampling_steps=200`, `recycling_steps=3`, `diffusion_samples=3`, `temperature=0.20`, `seed=123` achieves ~33% iPSAE pass rate with best ΔG around −9 to −10 kcal/mol in ~1.5 h on Apple Silicon MPS.
+
+For research-facing runs, we recommend using the same or stricter settings on Colab/CUDA and confirming that top candidates remain stable across repeated runs with fixed or varied seeds.
 
 ---
 
@@ -159,6 +168,13 @@ The app auto-detects the available accelerator (CUDA → MPS → CPU).
 - Gly-rich sequences tend to appear at low ProteinMPNN temperature (consider temperature ≥ 0.30 for more diverse designs)
 - Intended for hit identification; experimental validation is required for lead optimization
 - iPSAE scores from Boltz-1 MPS (Mac) differ numerically from CUDA (Colab) — use Colab results for research
+
+## Interpretation Notes
+
+- This app is designed for **hit discovery and candidate prioritization**, not for replacing experimental binding assays.
+- Absolute iPSAE or ΔG values should be interpreted cautiously; relative ranking and cross-run consistency are more reliable than any single score.
+- Hardware backend, MSA usage, sampling settings, and seed can all affect the final ranking.
+- Promising candidates should be re-run under research settings and validated experimentally before drawing biological conclusions.
 
 ---
 
@@ -275,6 +291,13 @@ Cell 6 完了後に cloudflared 経由の公開 URL が表示されます。
 > **注意:** 研究用スコアの基準環境は CUDA（Colab T4）です。  
 > Mac（MPS）はハードウェアの数値差により異なるスコアが出ます。Mac は開発・UI確認用にご利用ください。
 
+### 推奨される使い分け
+
+- **Apple Silicon Mac** は、開発、UI確認、前処理、探索的な試行に使ってください。
+- **Google Colab + CUDA** は、研究用途で解釈する最終候補の生成とスコアリングに使ってください。
+- **iPSAE** と **ΔG** は、実験値ではなく候補順位付けのための計算予測として扱ってください。
+- レポートや研究判断に使う際は、実行環境、パラメータ、乱数シードを必ず記録してください。
+
 ### 操作手順
 
 1. **構造を読み込む** — PDB/mmCIF ファイルをアップロード、またはキーワードで RCSB を検索
@@ -296,6 +319,8 @@ Cell 6 完了後に cloudflared 経由の公開 URL が表示されます。
 | `seed` | 42 | 123 | 再現性のための乱数シード |
 
 Expert モードのデフォルト値は実測に基づき最適化済みです。上記設定で Apple Silicon MPS 環境での iPSAE 通過率は約 33%、Best ΔG は −9〜−10 kcal/mol、実行時間は約 1.5 時間です。
+
+研究用途の実行では、Colab/CUDA 上で同等以上の設定を用い、固定シードまたは複数シードで再実行して上位候補の順位が安定するかを確認することを推奨します。
 
 ---
 
@@ -343,6 +368,13 @@ peptide_v2/
 - ProteinMPNN の低温度設定（0.20）では Gly（G）が多い配列が出やすい（多様性が必要な場合は 0.30 以上を検討）
 - ヒット探索段階向けのツール。リード最適化には実験的検証が必要
 - Mac（MPS）と Colab（CUDA）ではスコアが異なるため、研究用スクリーニングは Colab の結果を採用すること
+
+## 結果の解釈について
+
+- 本アプリは **ヒット探索と候補順位付け** のためのツールであり、実験的な結合評価を置き換えるものではありません。
+- iPSAE や ΔG の絶対値をそのまま断定的に解釈するのではなく、候補間の相対順位と再実行時の一貫性を重視してください。
+- ハードウェア、MSA の有無、サンプリング設定、乱数シードによって順位が変動する可能性があります。
+- 有望候補は研究用設定で再計算し、最終的には実験で検証してから生物学的な結論を出してください。
 
 ---
 
