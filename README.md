@@ -180,6 +180,9 @@ The app auto-detects the available accelerator (CUDA → MPS → CPU).
 
 ## License
 
+This project is licensed under the [MIT License](LICENSE).  
+Copyright (c) 2026 Ryuichi Kikuchi
+
 This project integrates the following open-source tools:
 
 - [ProteinMPNN](https://github.com/dauparas/ProteinMPNN) — MIT License
@@ -379,6 +382,9 @@ peptide_v2/
 ---
 
 ## ライセンス
+
+本プロジェクトは [MIT License](LICENSE) のもとで公開されています。  
+Copyright (c) 2026 Ryuichi Kikuchi
 
 本プロジェクトは以下のオープンソースツールを使用しています：
 
