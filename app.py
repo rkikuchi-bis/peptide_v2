@@ -108,8 +108,8 @@ if run_button and sidebar["ready"] and not st.session_state["running"]:
         boltz_diffusion_samples=sidebar["boltz_diffusion_samples"],
         boltz_seed=sidebar["boltz_seed"],
         boltz_skip_msa=sidebar["boltz_skip_msa"],
+        target_name=sidebar.get("target_name", ""),
     )
-    config.target_name = sidebar.get("target_name", "")
 
     # Use a plain dict as a thread-safe result holder.
     # The background thread writes only to this dict (never to st.session_state)

@@ -8,3 +8,26 @@ wheels/
 
 # Virtual environments
 .venv
+
+# macOS
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Pipeline runtime outputs
+/tmp/peptide_v2_*/
+
+# Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment variables
+.env
+.env.*

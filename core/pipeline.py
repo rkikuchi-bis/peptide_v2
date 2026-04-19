@@ -52,6 +52,9 @@ class PipelineConfig:
     boltz_seed: Optional[int] = 42
     boltz_skip_msa: bool = True  # skip receptor MSA fetch (Simple mode default)
 
+    # Metadata
+    target_name: str = ""
+
     # Output
     out_dir: Path = field(default_factory=lambda: Path(f"/tmp/peptide_v2_{uuid.uuid4().hex[:8]}"))
 

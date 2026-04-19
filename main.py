@@ -1,6 +1,17 @@
-def main():
-    print("Hello from peptide-v2!")
+"""Entry point notice.
 
+This is a Streamlit application. To run it:
+
+    uv run streamlit run app.py
+
+Or with plain Python (after installing dependencies):
+
+    streamlit run app.py
+
+See README.md for full setup instructions.
+"""
 
 if __name__ == "__main__":
-    main()
+    import subprocess
+    import sys
+    subprocess.run([sys.executable, "-m", "streamlit", "run", "app.py"])
