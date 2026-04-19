@@ -85,8 +85,15 @@ Open `http://localhost:8501` in your browser.
 
 ### Google Colab (T4 GPU — recommended for research)
 
-Open `colab_run.ipynb` and run Cells 1–7 in order.  
-A public URL via cloudflared is displayed after Cell 6.
+1. Fork or clone this repository to your own GitHub account.
+2. Open `colab_run.ipynb` in Google Colab and run Cells 1–7 in order.
+   - Cell 2 will prompt you to authorize Google Drive access — click **Allow** to enable model weight caching (~5 GB).
+   - To skip Drive caching, set `USE_DRIVE_CACHE = False` in Cell 2 (weights will be re-downloaded each session).
+3. A public URL via cloudflared is displayed after Cell 6.
+
+> **Before running Cell 3**, update `GITHUB_USER` and `GITHUB_REPO` to your own values.  
+> A GitHub Personal Access Token (read scope) is required.  
+> → https://github.com/settings/tokens
 
 > **Note:** CUDA (Colab T4) is the reference environment for research-quality scores.  
 > Mac (MPS) produces numerically different results due to hardware differences — use Mac for development and UI testing only.
@@ -288,8 +295,15 @@ uv run streamlit run app.py
 
 ### Google Colab（T4 GPU — 研究用スクリーニング推奨）
 
-`colab_run.ipynb` を開き、Cell 1〜7 を順に実行してください。  
-Cell 6 完了後に cloudflared 経由の公開 URL が表示されます。
+1. このリポジトリを自分の GitHub アカウントに fork または clone してください。
+2. `colab_run.ipynb` を Google Colab で開き、Cell 1〜7 を順に実行してください。
+   - Cell 2 を実行すると Google Drive へのアクセス認証のポップアップが表示されます。**「許可」をクリック**するとモデルの重みファイル（約 5 GB）がキャッシュされます。
+   - Drive を使用しない場合は Cell 2 の `USE_DRIVE_CACHE = False` に変更してください（セッションごとに再ダウンロードが発生します）。
+3. Cell 6 完了後に cloudflared 経由の公開 URL が表示されます。
+
+> **Cell 3 を実行する前に**、`GITHUB_USER` と `GITHUB_REPO` を自分のアカウント情報に書き換えてください。  
+> GitHub Personal Access Token（read スコープ）が必要です。  
+> → https://github.com/settings/tokens
 
 > **注意:** 研究用スコアの基準環境は CUDA（Colab T4）です。  
 > Mac（MPS）はハードウェアの数値差により異なるスコアが出ます。Mac は開発・UI確認用にご利用ください。
