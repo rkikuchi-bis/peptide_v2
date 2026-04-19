@@ -161,7 +161,10 @@ def run_pipeline(
         _progress("Predicting complex structures (Boltz-2)...", 3, 4)
 
         def boltz_progress(i, total):
-            _progress(f"Boltz-2 prediction {i+1}/{total}...", i, total)
+            if i == 0:
+                _progress(f"Boltz-2 predicting batch ({total} candidates)...", i, total)
+            else:
+                _progress(f"Boltz-2 parsing results ({i}/{total})...", i, total)
 
         raw_predictions = predict_batch(
             receptor_sequence=receptor_sequence,
